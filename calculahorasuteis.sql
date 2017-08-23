@@ -1,13 +1,14 @@
---Função para calcula a quantidade de horas úteis, considerando jornada de 8 as 17 e excluindo sábados e domingos
+--Função para calcula a quantidade de horas úteis, considerando jornada de 8 as 17h e excluindo sábados, domingos e feriados
 
 CREATE OR REPLACE Function HORAS_UTEIS(stime IN DATE,
-                                       etime    IN DATE) RETURN number IS
-  HORAS number;
+                                       etime IN DATE) RETURN NUMBER IS
+  NHORAS NUMBER;
+  NFERIADOS NUMBER;
 
 BEGIN
-
-  SELECT sum(elap)
-    INTO HORAS
+  --calcula o numero de horas úteis considerando jornada de 8 as 17h de segunda a sexta-feira
+ SELECT sum(elap)elap
+  INTO NHORAS
     FROM (select r,
                  greatest(stime, trunc(stime) + 8/ 24 + r),
                  least(trunc(stime) + r + 17 / 24, etime),
@@ -18,14 +19,39 @@ BEGIN
                     from all_objects
                    where rownum <=
                          (select trunc(etime) - trunc(stime) + 1 from dual))
-           where to_char(stime + r, 'Dy') not in ('Sáb', 'Dom'));
-  RETURN HORAS;
+           where to_char(stime + r, 'D') not in (1,7));
+           
+--calcula o número de horas de feriados
+SELECT CASE
+         WHEN QTD = 1 THEN
+          9
+         WHEN QTD = 2 THEN
+          18
+         WHEN QTD = 3 THEN
+          27
+         WHEN QTD = 4 THEN
+          36
+         ELSE
+          0
+       END QTD INTO NFERIADOS
+  FROM (
+SELECT COUNT(PERIODO) QTD
+  FROM FERIADOS F
+ WHERE 
+ TO_NUMBER(TO_CHAR(F.PERIODO, 'DD')) BETWEEN TO_NUMBER(TO_CHAR(STIME, 'DD')) AND  
+       (TO_CHAR(SYSDATE, 'DD'))
+ AND TO_NUMBER(TO_CHAR(F.PERIODO, 'MM')) BETWEEN TO_NUMBER(TO_CHAR(STIME, 'MM')) AND 
+       (TO_CHAR(SYSDATE, 'MM'))
+   AND TO_NUMBER(TO_CHAR(F.PERIODO, 'YYYY')) BETWEEN TO_NUMBER(TO_CHAR(STIME, 'YYYY')) AND 
+       TO_NUMBER(TO_CHAR(SYSDATE, 'YYYY'))
+   AND F.DIA NOT IN (1, 7));      
+   
 
+RETURN (NHORAS - NFERIADOS);
 END;
 
---Função para calcula o numero de horas de feriados
 
-Tabela FERIADOS
+/*Tabela FERIADOS
 Periodo   Dia Descrição
 27/02/2017	2	Carnaval
 28/02/2017	3	Carnaval
@@ -40,44 +66,8 @@ Periodo   Dia Descrição
 12/10/2017	5	N. Sra. Aparecida 
 02/11/2017	5	Finados
 15/11/2017	4	Proclamação da República
-25/12/2017	2	Natal
+25/12/2017	2	Natal*/
 
-CREATE OR REPLACE Function CALCULA_FERIADOS
-  RETURN number IS
-  QTD_FERIADO number;
-
-  BEGIN
-
-SELECT CASE
-         WHEN QTD = 1 THEN
-          8
-         WHEN QTD = 2 THEN
-          16
-         WHEN QTD = 3 THEN
-          24
-         WHEN QTD = 4 THEN
-          32
-         ELSE
-          0
-       END QTD INTO QTD_FERIADO
-  FROM (
-        --RETORNA QUANTIDADE DE FERIADOS DO MES/ANO ATÉ O DIA ATUAL
-        SELECT COUNT(PERIODO) QTD
-          FROM FERIADOS F
-         WHERE to_number(TO_CHAR(F.PERIODO, 'MM')) =
-               to_number(TO_CHAR(sysdate, 'mm'))
-           and to_number(TO_CHAR(f.PERIODO, 'yyyy')) =
-               to_number(TO_CHAR(sysdate, 'yyyy'))
-           and TO_NUMBER(TO_CHAR(F.PERIODO, 'DD')) <=
-               (SELECT MAX(to_number(to_char(DATAS_MES + LEVEL - 1, 'dd'))) DATA_
-                  FROM (SELECT TRUNC(to_date('01/' ||
-                                             to_char(sysdate, 'MM/YYYY'),
-                                             'DD/MM/YYYY')) DATAS_MES
-                          FROM DUAL)
-                CONNECT BY DATAS_MES + LEVEL - 1 <= sysdate)
-           and f.dia NOT IN (1, 7));
-RETURN QTD_FERIADO;
-END;
 
 --chamada das funções para calculo do número de horas úteis
-(U063.HORAS_UTEIS(J.CREATED,SYSDATE)) - (u063.calcula_feriados)
+U063.HORAS_UTEIS(J.CREATED,SYSDATE)
